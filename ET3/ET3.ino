@@ -11,7 +11,7 @@ int last_pot1val = 0;
 
 void setupADC() {
   PMC->PMC_PCER1 |= PMC_PCER1_PID37;  // Enable the ADC peripheral
-  ADC->ADC_MR = ADC_MR_PRESCAL(255)  // Set the prescaler to 255
+  ADC->ADC_MR = ADC_MR_PRESCAL(0)  // Set the prescaler to 255
               | ADC_MR_STARTUP_SUT64 // Set the startup time to 64 periods of ADC_CLK
               | ADC_MR_TRACKTIM(15)  // Set the tracking time to 15 periods of ADC_CLK
               | ADC_MR_SETTLING_AST3;// Set the settling time to 17 periods of ADC_CLK
@@ -102,8 +102,6 @@ void loop() {
 
     // Imprime les valeurs ADC sur le moniteur série
     for (int i = 0; i < bufferSize; i++) {
-      Serial.println(adcBuffer[i]);
-
       // Écrit les données dans le registre du DAC
       DACC->DACC_CDR = DACC_CDR_DATA(adcBuffer[i]);
       // Attendez que la conversion du DAC soit terminée

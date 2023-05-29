@@ -44,7 +44,7 @@ void TC0_Handler() {
 }
 
 void setup() {
-  Serial.begin(460800);
+  Serial.begin(115200);
 
   setupADC();
 

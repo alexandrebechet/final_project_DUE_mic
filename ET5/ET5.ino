@@ -12,6 +12,7 @@ int Fc = 0;
 int last_pot1val = 0;
 bool but1val = false;
 int FcNum = 1;
+int FeNum = 1;
 
 // buffer ADC
 const int bufferSize = 128;
@@ -152,10 +153,17 @@ void printFc(){
   display.print(Fc);
 }
 
+void printCantBeFiltered(){
+  display.setCursor(2, 10); 
+  display.print(F("Shannon isn't verified"));
+  display.display(); 
+}
+
 void displayFFT(){
   // La fonction loop ne fait rien d'autre que d'attendre une interruption
   for (byte i = 0; i < SAMPLES; i++) {
     vReal[i] = adcBuffer[i];
+    Serial.println(adcBuffer[i]);
     vImag[i] = 0;    
   }
   FFTC.DCRemoval();
@@ -176,7 +184,6 @@ void displayFFTfiltered(){
   for (byte i = 0; i < SAMPLES; i++) {
     vReal[i] = filteredBuffer[i];
     Serial.println(filteredBuffer[i]);
-    Serial.println(filteredBuffer[i]);
     vImag[i] = 0;    
   }
   FFTC.DCRemoval();
@@ -195,14 +202,15 @@ void displayFFTfiltered(){
 // RIF
 
 void RIF(){
+  uint32_t filteredBufferTempo[bufferSize];
   filteredBuffer[0] = adcBuffer[0];
 
   for (int n = 1; n < bufferSize; n++) {
     filteredBuffer[n] = 0;
     for(int k = 0; k < FILTER_TAP_NUM; k++){
-      filteredBuffer[n] += (uint16_t)(filter_taps[k] * adcBuffer[n - k]);
+      filteredBuffer[n] += (filter_taps[k] * adcBuffer[n - k] >> 16);
     }
-    filteredBuffer[n] = filteredBuffer[n] >> 15;
+    filteredBuffer[n] = filteredBuffer[n];
   }
 }
 
@@ -220,8 +228,8 @@ void setup() {
   setupDisplay();
 
   pinMode(6, INPUT); // bouton 1 -> Active ou désactive le RIF
-  pinMode(5, INPUT); // bouton 2 -> Fe
-  pinMode(4, INPUT); // bouton 3 -> Fc
+  pinMode(5, INPUT); // bouton 2 -> Fc
+  pinMode(4, INPUT); // bouton 3 -> Fe
 
   // Enable the timer counter and trigger it
   TC0->TC_CHANNEL[0].TC_CCR = TC_CCR_CLKEN | TC_CCR_SWTRG;
@@ -229,6 +237,16 @@ void setup() {
 
 void loop() {
   int pot1val = map(ADC->ADC_CDR[0], 0, 4095, 1, 4);
+  // int but3val = analogRead(4);
+
+  // if(but3val == true && FeNum == 3){
+  //   FeNum = 1;
+  //   delay(100);
+  // }
+  // else if(but3val == true){
+  //   FeNum++;
+  //   delay(100);
+  // }
 
   if(pot1val == 1){
     Fe = Fe1;
@@ -239,8 +257,11 @@ void loop() {
   else if(pot1val == 2){
     Fe = Fe2;
   }
+  else{
+    Fe = 0;
+  }
 
-  if(pot1val - last_pot1val != 0){
+  if(last_pot1val - pot1val != 0){
      setupTCRC(); // on actualise la fréquence d'échantillonage dans l'ADC
   }
 
@@ -267,31 +288,62 @@ void loop() {
 
       if(but2val == true && FcNum == 3){
         FcNum = 1;
+        delay(100);
       }
       else if(but2val == true){
         FcNum++;
+        delay(100);
       }
 
-      if(FcNum == 1){
+      if(FcNum == 1 && Fe == 32000){
         Fc = Fc1;
         RIF();
+        printFc();
+
+        for (int i = 0; i < bufferSize; i++) {
+          // Écrit les données dans le registre du DAC
+          DACC->DACC_CDR = DACC_CDR_DATA(filteredBuffer[i]);
+          // Attendez que la conversion du DAC soit terminée
+          while (!(DACC->DACC_ISR & DACC_ISR_TXRDY));
+        }
+        displayFFTfiltered();
+      }
+      else if(FcNum == 1 && Fe != 32000){
+        Fc = Fc1;
+        printFc();
+        for (int i = 0; i < bufferSize; i++) {
+          // Écrit les données dans le registre du DAC
+          DACC->DACC_CDR = DACC_CDR_DATA(adcBuffer[i]);
+          // Attendez que la conversion du DAC soit terminée
+          while (!(DACC->DACC_ISR & DACC_ISR_TXRDY));
+        }
+
+        printCantBeFiltered();
       }
       else if(FcNum == 2){
         Fc = Fc2;
+        printFc();
+        for (int i = 0; i < bufferSize; i++) {
+          // Écrit les données dans le registre du DAC
+          DACC->DACC_CDR = DACC_CDR_DATA(adcBuffer[i]);
+          // Attendez que la conversion du DAC soit terminée
+          while (!(DACC->DACC_ISR & DACC_ISR_TXRDY));
+        }
+
+        printCantBeFiltered();
       }
       else if(FcNum == 3){
         Fc = Fc3;
-      }
-      
-      printFc();
+        printFc();
+        for (int i = 0; i < bufferSize; i++) {
+          // Écrit les données dans le registre du DAC
+          DACC->DACC_CDR = DACC_CDR_DATA(adcBuffer[i]);
+          // Attendez que la conversion du DAC soit terminée
+          while (!(DACC->DACC_ISR & DACC_ISR_TXRDY));
+        }
 
-      for (int i = 0; i < bufferSize; i++) {
-        // Écrit les données dans le registre du DAC
-        DACC->DACC_CDR = DACC_CDR_DATA(filteredBuffer[i]);
-        // Attendez que la conversion du DAC soit terminée
-        while (!(DACC->DACC_ISR & DACC_ISR_TXRDY));
+        printCantBeFiltered();
       }
-      displayFFTfiltered();
     }
     else{
       for (int i = 0; i < bufferSize; i++) {
